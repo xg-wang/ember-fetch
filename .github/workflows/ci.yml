@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request: {}
+  schedule:
+    - cron: '0 3 * * *' # daily, at 3am
+
+jobs:
+  test:
+    name: Tests
+
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew cask install google-chrome
+      - uses: actions/checkout@v1
+      - uses: actions/setup-node@v1
+        with:
+          node-version: 8.x
+      - name: get yarn cache dir
+        id: yarn-cache
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+      - uses: actions/cache@v1
+        with:
+          path: ${{ steps.yarn-cache.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+      - name: install dependencies
+        run: yarn install --frozen-lockfile --ignore-engines
+      - name: lint
+        if: matrix.os != 'windows-latest'
+        run: yarn lint:js
+      - name: test
+        run: yarn test
+      - name: node-test
+        run: yarn test:node
+
+  floating-dependencies:
+    name: Floating Dependencies
+
+    runs-on: ubuntu-latest
+
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-node@v1
+        with:
+          node-version: 8.x
+      - name: get yarn cache dir
+        id: yarn-cache
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+      - uses: actions/cache@v1
+        with:
+          path: ${{ steps.yarn-cache.outputs.dir }}
+          key: ${{ runner.os }}-yarn-floating-dependencies-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+      - name: install dependencies
+        run: yarn install --no-lockfile
+      - run: yarn test
+
+  ember-try-scenarios:
+    name: ${{ matrix.ember-try-scenario }}
+
+    runs-on: ubuntu-latest
+
+    needs: [test, floating-dependencies]
+
+    strategy:
+      fail-fast: true
+      matrix:
+        ember-try-scenario:
+          - ember-lts-3.4
+          - ember-lts-3.8
+          - ember-lts-3.12
+          - ember-release
+          - ember-beta
+          - ember-canary
+          - ember-default
+          - ember-default-with-jquery
+
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions/setup-node@v1
+        with:
+          node-version: 8.x
+      - name: get yarn cache dir
+        id: yarn-cache
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+      - uses: actions/cache@v1
+        with:
+          path: ${{ steps.yarn-cache.outputs.dir }}
+          key: ${{ runner.os }}-yarn-try-scenarios-${{ matrix.ember-try-scenario }}-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+      - name: install dependencies
+        run: yarn install
+      - name: test
+        env:
+          EMBER_TRY_SCENARIO: ${{ matrix.ember-try-scenario }}
+        run: node_modules/.bin/ember try:one $EMBER_TRY_SCENARIO
+
