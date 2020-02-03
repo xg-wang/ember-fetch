@@ -27,7 +27,8 @@ jobs:
       - uses: actions/setup-node@v1
         with:
           node-version: 8.x
-      - run: npm i -g npm
+      - run: npm update -g npm
+        if: matrix.os == 'windows-latest'
       - name: get yarn cache dir
         id: yarn-cache
         run: echo "::set-output name=dir::$(yarn cache dir)"
